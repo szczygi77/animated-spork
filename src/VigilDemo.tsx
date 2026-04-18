@@ -9,11 +9,13 @@ import {
   CloudOff,
   Cpu,
   FileText,
+  AtSign,
   Gamepad2,
   LayoutDashboard,
   Laptop,
   Lock,
   MessageCircle,
+  MessagesSquare,
   MessageSquare,
   Radio,
   Send,
@@ -27,6 +29,7 @@ import {
   Users,
   Video,
   X,
+  type LucideIcon,
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
@@ -78,10 +81,32 @@ const VAULT_ITEMS: VaultItem[] = [
     patterns: ["Podszywanie pod administrację", "Wyłudzenie przedmiotów"],
     accountHint: "Link zewnętrzny zablokowany",
   },
+  {
+    id: "4",
+    title: "Presja na prywatne DM — Instagram",
+    severity: "średnie",
+    platform: "Instagram",
+    time: "2026-04-17 · 11:28",
+    category: "Grooming (heurystyka)",
+    patterns: ["Prośba o przejście na „priv”", "Eskalacja intymności w DM"],
+    accountHint: "Metadane konta · bez treści wiadomości",
+  },
+  {
+    id: "5",
+    title: "SMS z linkiem — wiadomość systemowa",
+    severity: "niskie",
+    platform: "SMS / RCS",
+    time: "2026-04-11 · 08:03",
+    category: "Scam i phishing",
+    patterns: ["Link skrócony z nieznanego numeru", "Podszywanie pod operatora"],
+    accountHint: "Numer znormalizowany lokalnie",
+  },
 ]
 
 const PLATFORMS = [
   { name: "Discord", Icon: MessageSquare },
+  { name: "Instagram", Icon: AtSign },
+  { name: "SMS / RCS", Icon: MessagesSquare },
   { name: "Steam", Icon: Radio },
   { name: "TikTok", Icon: Video },
 ] as const
@@ -92,6 +117,8 @@ const PATTERN_FEED = [
   "Wykryto wzorzec: Off-platforming",
   "Wykryto wzorzec: Słodka tajemnica (grooming)",
   "Wykryto wzorzec: Scam / phishing",
+  "Wykryto wzorzec: Instagram — presja na prywatne DM (zablokowano)",
+  "Wykryto wzorzec: Podejrzany SMS z linkiem (zablokowano)",
 ] as const
 
 /** Demo: wynik z analizy behawioralnej (bez interakcji użytkownika). */
@@ -110,7 +137,7 @@ type CertifiedApp = {
   status: string
   description: string
   lastAudit: string
-  Icon: typeof MessageSquare
+  Icon: LucideIcon
   badgeTone: "gold" | "sky"
 }
 
@@ -142,6 +169,24 @@ const CERTIFIED_APPS: CertifiedApp[] = [
     Icon: Box,
     badgeTone: "gold",
   },
+  {
+    id: "instagram",
+    name: "Instagram (Safe DM)",
+    status: "Zintegrowano z Vigil SDK",
+    description: "Filtr DM i komentarzy — wykrywanie groomingowych schematów",
+    lastAudit: "2026-03-28",
+    Icon: AtSign,
+    badgeTone: "sky",
+  },
+  {
+    id: "sms",
+    name: "SMS / RCS (Mobile Shield)",
+    status: "Zintegrowano z Vigil SDK",
+    description: "Analiza nadawcy i linków w wiadomościach systemowych",
+    lastAudit: "2026-03-26",
+    Icon: MessagesSquare,
+    badgeTone: "gold",
+  },
 ]
 
 const cardBase =
@@ -151,9 +196,11 @@ const TEEN_SCAN_ITEMS: {
   id: string
   label: string
   time: string
-  Icon: typeof MessageSquare
+  Icon: LucideIcon
 }[] = [
   { id: "discord", label: "Discord", time: "Dziś, 14:02", Icon: MessageSquare },
+  { id: "instagram", label: "Instagram", time: "Dziś, 13:48", Icon: AtSign },
+  { id: "sms", label: "SMS / RCS", time: "Dziś, 12:10", Icon: MessagesSquare },
   { id: "roblox", label: "Roblox", time: "Dziś, 13:40", Icon: Gamepad2 },
   {
     id: "messenger",
@@ -347,8 +394,8 @@ export default function VigilDemo() {
                 <p className="font-semibold text-red-100">Instant Alert</p>
                 <p className="mt-1 text-sm text-red-200/90">
                   {toastSextortion
-                    ? "VIGIL wykrył krytyczne zagrożenie (Grooming) w aplikacji Discord. Hard Lock aktywny na urządzeniu."
-                    : "Wykryto krytyczne zagrożenie behawioralne. Hard Lock aktywny na urządzeniu dziecka — bez ujawniania treści wiadomości."}
+                    ? "VIGIL wykrył krytyczne zagrożenie (Grooming) w aplikacji Discord / Instagram. Hard Lock aktywny na urządzeniu."
+                    : "Wykryto krytyczne zagrożenie behawioralne (m.in. SMS / Instagram). Hard Lock aktywny na urządzeniu dziecka — bez ujawniania treści wiadomości."}
                 </p>
                 <div className="mt-3 flex items-center gap-3 text-xs font-medium">
                   <button
@@ -709,7 +756,7 @@ function InstantAlertModal({
                 </p>
                 <p className="mt-1 text-sm text-red-200/90">
                   VIGIL wykrył krytyczne zagrożenie (Grooming) w aplikacji
-                  Discord.
+                  Discord / Instagram.
                 </p>
               </div>
 
@@ -718,8 +765,10 @@ function InstantAlertModal({
                   Analiza behawioralna
                 </p>
                 <p className="mt-2 text-sm text-zinc-300">
-                  Użytkownik X próbuje wyłudzić zdjęcia i przenieść rozmowę na
-                  WhatsApp. Wykryto próbę eskalacji intymności i off-platforming.
+                  Użytkownik X próbuje wyłudzić zdjęcia w DM na Instagramie i
+                  przenieść rozmowę na WhatsApp; równolegle pojawił się SMS z
+                  linkiem z nieznanego numeru. Wykryto eskalację intymności i
+                  off-platforming.
                 </p>
               </div>
             </div>
@@ -1065,7 +1114,7 @@ function SummaryPanel({
               {PHI_LABEL}
             </span>
           </div>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             {PLATFORMS.map(({ name, Icon }, i) => (
               <motion.div
                 key={name}
@@ -1085,6 +1134,13 @@ function SummaryPanel({
               </motion.div>
             ))}
           </div>
+          <p className="mt-3 text-xs leading-relaxed text-zinc-600">
+            Na smartfonie chronione są także{" "}
+            <strong className="text-zinc-400">SMS / RCS</strong> oraz{" "}
+            <strong className="text-zinc-400">Instagram</strong> (DM i
+            komentarze) — analiza wzorców wyłącznie na urządzeniu, bez treści w
+            chmurze.
+          </p>
         </div>
       )}
 
@@ -1344,7 +1400,8 @@ function TeenShield({
             Twój Vigil
           </h2>
           <p className="mt-1 text-sm text-zinc-500">
-            Wszystko dzieje się na Twoim telefonie — bez wysyłania czatu do chmury.
+            Wszystko dzieje się na Twoim telefonie — m.in. Discord, Instagram,
+            SMS — bez wysyłania treści do chmury.
           </p>
         </motion.div>
 
