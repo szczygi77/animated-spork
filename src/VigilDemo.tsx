@@ -1,28 +1,36 @@
 import { AnimatePresence, motion } from "framer-motion"
 import {
   AlertTriangle,
+  Award,
   Bell,
+  Box,
   ChevronDown,
   ChevronRight,
   CloudOff,
   Cpu,
   FileText,
+  Gamepad2,
   LayoutDashboard,
+  Laptop,
   Lock,
+  MessageCircle,
   MessageSquare,
-  Minus,
-  Plus,
   Radio,
+  Send,
   Shield,
+  ShieldAlert,
   ShieldCheck,
+  Smartphone,
   Sparkles,
+  Tablet,
+  Unlock,
   Users,
   Video,
   X,
 } from "lucide-react"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 
-type ParentSection = "summary" | "vault" | "locks" | "family"
+type ParentSection = "summary" | "vault" | "locks" | "family" | "certified"
 type AgeBand = "under16" | "senior16"
 type Severity = "niskie" | "średnie" | "krytyczne"
 type LockReason = "sextortion" | "offplatform"
@@ -86,8 +94,87 @@ const PATTERN_FEED = [
   "Wykryto wzorzec: Scam / phishing",
 ] as const
 
+/** Demo: wynik z analizy behawioralnej (bez interakcji użytkownika). */
+function computeBehavioralSafetyScore(): number {
+  const patternSignals = PATTERN_FEED.length
+  const criticalIncidents = VAULT_ITEMS.filter(
+    (v) => v.severity === "krytyczne",
+  ).length
+  const raw = 9.2 - patternSignals * 0.1 - criticalIncidents * 0.2
+  return Math.round(Math.min(10, Math.max(1, raw)) * 10) / 10
+}
+
+type CertifiedApp = {
+  id: string
+  name: string
+  status: string
+  description: string
+  lastAudit: string
+  Icon: typeof MessageSquare
+  badgeTone: "gold" | "sky"
+}
+
+const CERTIFIED_APPS: CertifiedApp[] = [
+  {
+    id: "roblox",
+    name: "Roblox (Vigil Edition)",
+    status: "Zintegrowano z Vigil SDK",
+    description: "Pełna zgodność z protokołem ochrony behawioralnej",
+    lastAudit: "2026-04-01",
+    Icon: Gamepad2,
+    badgeTone: "gold",
+  },
+  {
+    id: "discord",
+    name: "Discord (Safe-Plugin)",
+    status: "Zintegrowano z Vigil SDK",
+    description: "Weryfikacja wzorców groomingowych aktywna",
+    lastAudit: "2026-03-22",
+    Icon: MessageSquare,
+    badgeTone: "sky",
+  },
+  {
+    id: "minecraft",
+    name: "Minecraft (Education Shield)",
+    status: "Zintegrowano z Vigil SDK",
+    description: "Ochrona on-device włączona",
+    lastAudit: "2026-03-15",
+    Icon: Box,
+    badgeTone: "gold",
+  },
+]
+
 const cardBase =
   "rounded-2xl border border-white/10 bg-zinc-900/50 backdrop-blur-sm"
+
+const TEEN_SCAN_ITEMS: {
+  id: string
+  label: string
+  time: string
+  Icon: typeof MessageSquare
+}[] = [
+  { id: "discord", label: "Discord", time: "Dziś, 14:02", Icon: MessageSquare },
+  { id: "roblox", label: "Roblox", time: "Dziś, 13:40", Icon: Gamepad2 },
+  {
+    id: "messenger",
+    label: "Messenger",
+    time: "Wczoraj, 21:15",
+    Icon: MessageCircle,
+  },
+]
+
+const teenCardBase =
+  "rounded-2xl border border-blue-500/20 bg-zinc-950/70 backdrop-blur-sm"
+
+const PROTECTED_DEVICES: {
+  id: string
+  label: string
+  Icon: typeof Laptop
+}[] = [
+  { id: "pc", label: "PC", Icon: Laptop },
+  { id: "phone", label: "Smartfon", Icon: Smartphone },
+  { id: "tablet", label: "Tablet", Icon: Tablet },
+]
 
 function severityStyles(s: Severity) {
   if (s === "krytyczne")
@@ -110,12 +197,13 @@ export default function VigilDemo() {
   const [mode, setMode] = useState<"teen" | "parent">("parent")
   const [section, setSection] = useState<ParentSection>("summary")
   const [ageBand, setAgeBand] = useState<AgeBand>("under16")
-  const [safetyScore, setSafetyScore] = useState(8)
+  const behavioralSafetyScore = useMemo(() => computeBehavioralSafetyScore(), [])
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [hardLock, setHardLock] = useState(false)
   const [lockReason, setLockReason] = useState<LockReason>("offplatform")
   const [parentToast, setParentToast] = useState(false)
   const [toastSextortion, setToastSextortion] = useState(false)
+  const [showInstantAlert, setShowInstantAlert] = useState(false)
   const [vaultModalItem, setVaultModalItem] = useState<VaultItem | null>(null)
   const [reportStep, setReportStep] = useState<ReportStep>("idle")
 
@@ -124,6 +212,7 @@ export default function VigilDemo() {
     setHardLock(true)
     setParentToast(true)
     setToastSextortion(true)
+    setShowInstantAlert(true)
   }, [])
 
   const dismissLock = useCallback(() => {
@@ -133,6 +222,24 @@ export default function VigilDemo() {
   const dismissToast = useCallback(() => {
     setParentToast(false)
     setToastSextortion(false)
+  }, [])
+
+  const dismissInstantAlert = useCallback(() => {
+    setShowInstantAlert(false)
+  }, [])
+
+  const unlockFromInstantAlert = useCallback(() => {
+    setHardLock(false)
+    setParentToast(false)
+    setToastSextortion(false)
+    setShowInstantAlert(false)
+  }, [])
+
+  const generateSosFromInstantAlert = useCallback(() => {
+    setSection("vault")
+    setVaultModalItem(VAULT_ITEMS[0] ?? null)
+    setReportStep("idle")
+    setShowInstantAlert(false)
   }, [])
 
   const openCriticalModal = useCallback((item: VaultItem) => {
@@ -169,10 +276,6 @@ export default function VigilDemo() {
     }, 10000)
     return () => window.clearTimeout(t)
   }, [parentToast])
-
-  const bumpScore = (d: number) => {
-    setSafetyScore((s) => Math.min(10, Math.max(1, s + d)))
-  }
 
   return (
     <div className="relative min-h-[100dvh] min-h-screen bg-[#050505] text-zinc-100">
@@ -244,21 +347,37 @@ export default function VigilDemo() {
                 <p className="font-semibold text-red-100">Instant Alert</p>
                 <p className="mt-1 text-sm text-red-200/90">
                   {toastSextortion
-                    ? "Wykryto wzorzec zagrożenia: sextortion (szantaż intymnymi materiałami). Hard Lock na urządzeniu. Kategoria i metadane — bez cytatu treści rozmowy."
+                    ? "VIGIL wykrył krytyczne zagrożenie (Grooming) w aplikacji Discord. Hard Lock aktywny na urządzeniu."
                     : "Wykryto krytyczne zagrożenie behawioralne. Hard Lock aktywny na urządzeniu dziecka — bez ujawniania treści wiadomości."}
                 </p>
-                <button
-                  type="button"
-                  onClick={dismissToast}
-                  className="mt-3 text-xs font-medium text-red-300 underline"
-                >
-                  Zamknij
-                </button>
+                <div className="mt-3 flex items-center gap-3 text-xs font-medium">
+                  <button
+                    type="button"
+                    onClick={dismissToast}
+                    className="text-red-300 underline"
+                  >
+                    Zamknij
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowInstantAlert(true)}
+                    className="text-red-200 underline"
+                  >
+                    Otwórz alert
+                  </button>
+                </div>
               </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      <InstantAlertModal
+        open={showInstantAlert && mode === "parent"}
+        onClose={dismissInstantAlert}
+        onUnlock={unlockFromInstantAlert}
+        onGenerateSos={generateSosFromInstantAlert}
+      />
 
       <SosVaultModal
         item={vaultModalItem}
@@ -272,8 +391,7 @@ export default function VigilDemo() {
           ageBand={ageBand}
           section={section}
           onSection={setSection}
-          safetyScore={safetyScore}
-          onBumpScore={bumpScore}
+          behavioralSafetyScore={behavioralSafetyScore}
           expandedId={expandedId}
           onToggleVault={(id) =>
             setExpandedId((e) => (e === id ? null : id))
@@ -317,6 +435,45 @@ function ZeroCloudBadge() {
   )
 }
 
+const VIGIL_LOGO_SRC = `${import.meta.env.BASE_URL}vigil-logo.png`.replace(
+  /\/{2,}/g,
+  "/",
+)
+
+/** Logo PNG z jasnym tłem: `plate` — „szklana” płytka; `glow` — wersja na ciemne tło (filtr). */
+function VigilLogoMark({
+  variant = "plate",
+  className = "",
+}: {
+  variant?: "plate" | "glow"
+  className?: string
+}) {
+  if (variant === "glow") {
+    return (
+      <img
+        src={VIGIL_LOGO_SRC}
+        alt="Vigil"
+        width={180}
+        height={48}
+        className={`h-8 w-auto max-w-[min(100%,200px)] object-contain brightness-0 invert hue-rotate-[195deg] saturate-125 opacity-95 drop-shadow-[0_0_14px_rgba(56,189,248,0.45)] ${className}`}
+      />
+    )
+  }
+  return (
+    <div
+      className={`inline-flex items-center justify-center rounded-2xl border border-white/25 bg-gradient-to-b from-zinc-50 to-zinc-200/95 p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_10px_32px_rgba(0,0,0,0.45)] ring-1 ring-black/10 ${className}`}
+    >
+      <img
+        src={VIGIL_LOGO_SRC}
+        alt="Vigil"
+        width={220}
+        height={56}
+        className="h-10 w-auto max-w-[min(100%,220px)] object-contain md:h-11"
+      />
+    </div>
+  )
+}
+
 function SosVaultModal({
   item,
   reportStep,
@@ -357,38 +514,30 @@ function SosVaultModal({
             <h2 id="sos-title" className="pr-10 text-lg font-bold text-white">
               Protokół SOS — incydent krytyczny
             </h2>
-            <p className="mt-2 text-sm text-zinc-400">
-              Metadane i kategoria.{" "}
-              <strong className="text-zinc-300">
-                Treść rozmowy nie jest wyświetlana
-              </strong>{" "}
-              przed Twoją decyzją o zgłoszeniu — zgodnie z RODO i protokołem KGP.
-            </p>
-            <div className="mt-4 space-y-2 rounded-xl border border-white/10 bg-black/40 p-4 font-mono text-xs text-zinc-400">
-              <p>
-                <span className="text-zinc-600">Platforma:</span> {item.platform}
-              </p>
-              <p>
-                <span className="text-zinc-600">Czas:</span> {item.time}
-              </p>
-              <p>
-                <span className="text-zinc-600">Kategoria:</span> {item.category}
-              </p>
-              <p>
-                <span className="text-zinc-600">Identyfikator (lokalny):</span>{" "}
-                {item.accountHint}
-              </p>
-            </div>
-
-            {reportStep === "idle" && (
-              <button
-                type="button"
-                onClick={onGenerate}
-                className="mt-5 w-full rounded-xl border border-red-500/50 bg-red-600/90 py-3 text-sm font-semibold text-white shadow-[0_0_28px_rgba(239,68,68,0.3)] transition hover:bg-red-600"
-              >
-                Generuj raport dla Policji (KGP)
-              </button>
-            )}
+            {reportStep === "idle" ? (
+              <>
+                <p className="mt-2 text-sm leading-relaxed text-zinc-400">
+                  <strong className="text-zinc-300">
+                    Transkrypcje i treść rozmów nie są widoczne w panelu rodzica.
+                  </strong>{" "}
+                  Szczegółowe metadane incydentu (platforma, czas, kategoria,
+                  identyfikator) zostaną ujawnione dopiero po uruchomieniu
+                  oficjalnej ścieżki eksportu — zgodnie z RODO i protokołem KGP.
+                </p>
+                <p className="mt-3 rounded-xl border border-white/10 bg-black/30 p-3 text-xs text-zinc-500">
+                  Incydent krytyczny zweryfikowany lokalnie na urządzeniu (Zero
+                  Cloud). Jedyna świadoma droga ujawnienia danych do celów
+                  zgłoszeniowych to przycisk poniżej.
+                </p>
+                <button
+                  type="button"
+                  onClick={onGenerate}
+                  className="mt-5 w-full rounded-xl border border-red-500/50 bg-red-600/90 py-3 text-sm font-semibold text-white shadow-[0_0_28px_rgba(239,68,68,0.3)] transition hover:bg-red-600"
+                >
+                  Generuj raport dla Policji (KGP)
+                </button>
+              </>
+            ) : null}
 
             {reportStep !== "idle" && reportStep !== "ready" && (
               <div className="mt-5 space-y-3">
@@ -416,6 +565,46 @@ function SosVaultModal({
                 animate={{ opacity: 1, y: 0 }}
                 className="mt-5 space-y-3"
               >
+                <div className="space-y-2 rounded-xl border border-white/10 bg-black/40 p-4 font-mono text-xs text-zinc-400">
+                  <p>
+                    <span className="text-zinc-600">Platforma:</span>{" "}
+                    {item.platform}
+                  </p>
+                  <p>
+                    <span className="text-zinc-600">Czas:</span> {item.time}
+                  </p>
+                  <p>
+                    <span className="text-zinc-600">Kategoria:</span>{" "}
+                    {item.category}
+                  </p>
+                  <p>
+                    <span className="text-zinc-600">Identyfikator (lokalny):</span>{" "}
+                    {item.accountHint}
+                  </p>
+                </div>
+                <p className="text-xs text-zinc-500">
+                  Transkrypcja i treść wiadomości{" "}
+                  <strong className="text-zinc-400">nie są</strong> częścią tego
+                  podglądu — pozostają zaszyte lokalnie do formalnej ścieżki
+                  przekazania organom.
+                </p>
+                <div className="rounded-xl border border-sky-500/25 bg-sky-500/5 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-sky-300">
+                    Podgląd raportu PDF (symulacja)
+                  </p>
+                  <p className="mt-2 text-xs text-zinc-400">
+                    Sygnatura czasowa: {item.time}
+                  </p>
+                  <p className="mt-1 text-xs text-zinc-400">
+                    Id sprawcy (zaszyfrowany): VIGIL-HASH-9F2A-77C1
+                  </p>
+                  <p className="mt-2 text-xs text-zinc-500">
+                    Fragment transkrypcji (wyłącznie ryzykowny):
+                  </p>
+                  <p className="mt-1 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-xs text-zinc-300">
+                    "...przenieśmy rozmowę na WhatsApp i wyślij prywatne zdjęcie..."
+                  </p>
+                </div>
                 <div className="flex items-center gap-2 text-emerald-400">
                   <FileText className="h-5 w-5" />
                   <span className="text-sm font-semibold">
@@ -436,6 +625,13 @@ Powiązanie: ${item.accountHint}
 UWAGA: Transkrypcja incydentu zabezpieczona lokalnie na urządzeniu.
 Vigil nie przesyła danych automatycznie — decyzja o wysłaniu należy do rodzica.`}
                 </pre>
+                <button
+                  type="button"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-sky-500/35 bg-sky-500/10 py-2.5 text-sm font-semibold text-sky-100 hover:bg-sky-500/15"
+                >
+                  <Send className="h-4 w-4" />
+                  Wyślij do CERT Polska / Policja
+                </button>
                 <p className="text-xs text-zinc-500">
                   W produkcji: eksport PDF/TXT jednym kliknięciem. Tu: podgląd
                   wyłącznie metadanych — bez treści czatu.
@@ -456,12 +652,184 @@ Vigil nie przesyła danych automatycznie — decyzja o wysłaniu należy do rodz
   )
 }
 
+function InstantAlertModal({
+  open,
+  onClose,
+  onUnlock,
+  onGenerateSos,
+}: {
+  open: boolean
+  onClose: () => void
+  onUnlock: () => void
+  onGenerateSos: () => void
+}) {
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"
+        >
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.98, opacity: 0 }}
+            className="w-full max-w-2xl rounded-2xl border border-red-500/40 bg-zinc-900/50 p-6 backdrop-blur-sm"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="rounded-xl border border-red-500/40 bg-red-500/15 p-2">
+                  <ShieldAlert className="h-5 w-5 text-red-300" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-red-300">
+                    Instant Alert
+                  </p>
+                  <h3 className="mt-1 text-lg font-bold text-white">
+                    Decyzja w sekundę
+                  </h3>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg p-1 text-zinc-500 hover:bg-white/10 hover:text-white"
+                aria-label="Zamknij"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              <div className="rounded-xl border border-red-500/35 bg-red-500/10 p-4">
+                <p className="text-sm font-semibold text-red-100">
+                  Powiadomienie push
+                </p>
+                <p className="mt-1 text-sm text-red-200/90">
+                  VIGIL wykrył krytyczne zagrożenie (Grooming) w aplikacji
+                  Discord.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-black/30 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  Analiza behawioralna
+                </p>
+                <p className="mt-2 text-sm text-zinc-300">
+                  Użytkownik X próbuje wyłudzić zdjęcia i przenieść rozmowę na
+                  WhatsApp. Wykryto próbę eskalacji intymności i off-platforming.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={onUnlock}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-amber-400/40 bg-amber-500/15 py-3 text-sm font-semibold text-amber-100 hover:bg-amber-500/20"
+              >
+                <Unlock className="h-4 w-4" />
+                Odblokuj
+              </button>
+              <button
+                type="button"
+                onClick={onGenerateSos}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-500/45 bg-red-600/85 py-3 text-sm font-semibold text-white hover:bg-red-600"
+              >
+                <FileText className="h-4 w-4" />
+                Generuj Raport SOS
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
+
+function VigilSafeBadge({ tone }: { tone: "gold" | "sky" }) {
+  const toneCls =
+    tone === "gold"
+      ? "border-amber-400/35 bg-amber-500/10 text-amber-100"
+      : "border-sky-400/35 bg-sky-500/10 text-sky-100"
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${toneCls}`}
+    >
+      <ShieldCheck className="h-3 w-3 shrink-0" strokeWidth={2} />
+      Vigil Safe
+    </span>
+  )
+}
+
+function CertifiedAppsPanel() {
+  return (
+    <div className="space-y-6">
+      <div className={`${cardBase} border-blue-500/15 p-6`}>
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-sky-200/90">
+          Vigil Safe — certyfikowane ekosystemy
+        </h2>
+        <p className="mt-3 text-sm leading-relaxed text-zinc-400">
+          Te aplikacje posiadają wbudowany silnik Vigil. Gwarantują najwyższy
+          standard ochrony bez utraty wydajności i są w pełni zgodne z
+          architekturą Zero Cloud.
+        </p>
+        <p className="mt-3 text-sm leading-relaxed text-zinc-500">
+          Dzięki integracji SDK nastolatek może swobodnie korzystać z tych
+          przestrzeni przy zachowaniu pełnej dyskrecji — analiza behawioralna
+          odbywa się lokalnie, a rodzic otrzymuje wyłącznie agregaty i sygnały
+          zgodne z polityką produktu.
+        </p>
+      </div>
+
+      <ul className="space-y-4">
+        {CERTIFIED_APPS.map((app, i) => (
+          <motion.li
+            key={app.id}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.06 }}
+            className="rounded-2xl border border-blue-500/20 bg-zinc-900/50 p-5 backdrop-blur-sm"
+          >
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex gap-4">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-blue-500/25 bg-blue-500/5 text-blue-300">
+                  <app.Icon className="h-7 w-7" strokeWidth={1.5} />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="font-semibold text-white">{app.name}</h3>
+                    <VigilSafeBadge tone={app.badgeTone} />
+                  </div>
+                  <p className="mt-1 text-sm text-zinc-400">{app.description}</p>
+                  <p className="mt-2 text-xs font-medium text-emerald-300/90">
+                    {app.status}
+                  </p>
+                </div>
+              </div>
+              <div className="shrink-0 text-left sm:text-right">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+                  Ostatni audyt
+                </p>
+                <p className="mt-0.5 font-mono text-sm text-zinc-300">
+                  {app.lastAudit}
+                </p>
+              </div>
+            </div>
+          </motion.li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 function ParentShell({
   ageBand,
   section,
   onSection,
-  safetyScore,
-  onBumpScore,
+  behavioralSafetyScore,
   expandedId,
   onToggleVault,
   onOpenCritical,
@@ -470,8 +838,7 @@ function ParentShell({
   ageBand: AgeBand
   section: ParentSection
   onSection: (s: ParentSection) => void
-  safetyScore: number
-  onBumpScore: (d: number) => void
+  behavioralSafetyScore: number
   expandedId: string | null
   onToggleVault: (id: string) => void
   onOpenCritical: (item: VaultItem) => void
@@ -481,6 +848,7 @@ function ParentShell({
     [
       { id: "summary", label: "Podsumowanie", Icon: LayoutDashboard },
       { id: "vault", label: "Skarbiec dowodów", Icon: Shield },
+      { id: "certified", label: "Certyfikowane", Icon: Award },
       { id: "locks", label: "Ustawienia blokad", Icon: Lock },
       { id: "family", label: "Moja rodzina", Icon: Users },
     ]
@@ -489,6 +857,9 @@ function ParentShell({
     <div className="flex min-h-[100dvh] flex-col pt-28 md:flex-row md:pt-24">
       <aside className="border-b border-white/10 bg-zinc-950/60 px-4 py-4 backdrop-blur-md md:w-56 md:border-b-0 md:border-r md:px-3">
         <div className="mb-6 hidden px-2 md:block">
+          <div className="mb-3 flex justify-center">
+            <VigilLogoMark variant="plate" className="w-full max-w-[11rem]" />
+          </div>
           <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">
             VIGIL 3.0
           </p>
@@ -526,11 +897,15 @@ function ParentShell({
                 <h1 className="text-2xl font-bold tracking-tight text-white md:text-3xl">
                   {section === "summary" && "Podsumowanie ochrony"}
                   {section === "vault" && "Skarbiec dowodów (Evidence Vault)"}
+                  {section === "certified" &&
+                    "Certyfikowane aplikacje (Vigil Safe)"}
                   {section === "locks" && "Ustawienia blokad (Hard Lock)"}
                   {section === "family" && "Moja rodzina"}
                 </h1>
                 <p className="mt-1 text-sm text-zinc-500">
-                  Analiza wzorców — polityka bez cytatów (No-Quotation)
+                  {section === "certified"
+                    ? "B2B — zaufane integracje SDK i Zero Cloud"
+                    : "Analiza wzorców — polityka bez cytatów (No-Quotation)"}
                 </p>
                 {ageBand === "senior16" && (
                   <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200/90">
@@ -551,8 +926,7 @@ function ParentShell({
             {section === "summary" && (
               <SummaryPanel
                 ageBand={ageBand}
-                safetyScore={safetyScore}
-                onBumpScore={onBumpScore}
+                behavioralSafetyScore={behavioralSafetyScore}
               />
             )}
             {section === "vault" && (
@@ -563,6 +937,7 @@ function ParentShell({
                 onOpenCritical={onOpenCritical}
               />
             )}
+            {section === "certified" && <CertifiedAppsPanel />}
             {section === "locks" && <LocksPanel />}
             {section === "family" && <FamilyPanel ageBand={ageBand} />}
           </div>
@@ -589,15 +964,35 @@ function ParentShell({
 
 function SummaryPanel({
   ageBand,
-  safetyScore,
-  onBumpScore,
+  behavioralSafetyScore,
 }: {
   ageBand: AgeBand
-  safetyScore: number
-  onBumpScore: (d: number) => void
+  behavioralSafetyScore: number
 }) {
   return (
     <div className="space-y-8">
+      <div className={`${cardBase} p-5`}>
+        <h3 className="text-sm font-semibold text-white">Chronione urządzenia</h3>
+        <p className="mt-1 text-xs text-zinc-500">
+          Lokalny silnik LLM aktywny na wszystkich podpiętych urządzeniach.
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          {PROTECTED_DEVICES.map(({ id, label, Icon }) => (
+            <div
+              key={id}
+              className="rounded-xl border border-white/10 bg-black/30 p-3"
+            >
+              <div className="flex items-center gap-2">
+                <Icon className="h-4 w-4 text-sky-300" />
+                <p className="text-sm font-medium text-zinc-200">{label}</p>
+              </div>
+              <p className="mt-2 text-xs text-emerald-300">Status: Chroniony</p>
+              <p className="text-[11px] text-zinc-500">Lokalne LLM aktywne</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {ageBand === "senior16" && (
         <div className={`${cardBase} border-amber-500/20 p-6`}>
           <h2 className="text-sm font-semibold uppercase tracking-wider text-amber-200/90">
@@ -628,45 +1023,32 @@ function SummaryPanel({
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-20%,rgba(59,130,246,0.2),transparent)]" />
           <div className="relative flex flex-col items-center text-center">
             <p className="text-sm font-medium text-zinc-400">
-              Wskaźnik bezpieczeństwa (skala 1–10)
+              Obiektywny wskaźnik bezpieczeństwa (skala 1–10, tylko odczyt)
             </p>
             <motion.p
-              key={safetyScore}
-              initial={{ scale: 0.92, opacity: 0.7 }}
+              key={`${ageBand}-${behavioralSafetyScore}`}
+              initial={{ scale: 0.96, opacity: 0.75 }}
               animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: "spring", stiffness: 400, damping: 25 }}
+              transition={{ type: "spring", stiffness: 380, damping: 28 }}
               className="mt-2 text-6xl font-bold tabular-nums text-white md:text-7xl"
               style={{
                 textShadow:
                   "0 0 40px rgba(59,130,246,0.45), 0 0 80px rgba(59,130,246,0.15)",
               }}
             >
-              {safetyScore}
+              {behavioralSafetyScore.toFixed(1)}
               <span className="text-3xl font-semibold text-zinc-500 md:text-4xl">
                 /10
               </span>
             </motion.p>
-            <div className="mt-4 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => onBumpScore(-1)}
-                className="rounded-lg border border-white/10 bg-white/5 p-2 hover:bg-white/10"
-                aria-label="Zmniejsz wskaźnik"
-              >
-                <Minus className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => onBumpScore(1)}
-                className="rounded-lg border border-white/10 bg-white/5 p-2 hover:bg-white/10"
-                aria-label="Zwiększ wskaźnik"
-              >
-                <Plus className="h-4 w-4" />
-              </button>
-            </div>
-            <p className="mt-4 max-w-md text-sm text-zinc-400">
+            <p className="mt-3 max-w-lg text-xs leading-relaxed text-zinc-500">
+              Wskaźnik wyliczony lokalnie przez model Phi-3 Mini na podstawie
+              ostatnich 7 dni.
+            </p>
+            <p className="mt-3 max-w-md text-sm text-zinc-400">
               Raport tygodniowy: wskaźnik + liczba zablokowanych zagrożeń — bez
-              cytatów i bez wglądu w prywatne rozmowy.
+              cytatów i bez wglądu w prywatne rozmowy. Wynik nie podlega ręcznej
+              edycji.
             </p>
           </div>
         </motion.div>
@@ -762,8 +1144,11 @@ function VaultPanel({
   return (
     <div className="space-y-4">
       <p className="text-sm text-zinc-400">
-        Kliknij wiersz <strong className="text-zinc-300">krytyczny</strong>, aby
-        otworzyć modal SOS z generowaniem raportu KGP. Inne poziomy: rozwinięcie
+        W widoku rodzica <strong className="text-zinc-300">nie ma podglądu
+        transkrypcji</strong> ani treści rozmów — zgodnie z RODO i polityką
+        No-Quotation. Wiersz <strong className="text-zinc-300">krytyczny</strong>
+        : otwiera protokół SOS; szczegółowe metadane incydentu pojawią się dopiero
+        po wygenerowaniu raportu dla Policji (KGP). Pozostałe wiersze: rozwinięcie
         metadanych (bez treści wiadomości).
       </p>
       <ul className="space-y-3">
@@ -789,7 +1174,9 @@ function VaultPanel({
                   {item.title}
                 </span>
                 {isCritical ? (
-                  <span className="text-xs text-sky-400">Otwórz SOS →</span>
+                  <span className="text-xs text-sky-400">
+                    Protokół SOS — metadane po KGP →
+                  </span>
                 ) : open ? (
                   <ChevronDown className="h-5 w-5 text-zinc-500" />
                 ) : (
@@ -901,41 +1288,250 @@ function TeenShield({
     lockReason === "sextortion"
       ? "Wykryto wzorzec: sextortion (szantaż intymnymi materiałami). Kategoria bez cytatu treści."
       : "Wykryto wzorzec krytyczny behawioralnie. Szczegóły kategorii przekazane rodzicowi jako metadane — nie cytat czatu."
+  const [scanState, setScanState] = useState<"safe" | "analyzing" | "alert">(
+    "safe",
+  )
+
+  useEffect(() => {
+    if (hardLock) {
+      setScanState("alert")
+      return
+    }
+    setScanState("safe")
+    const interval = window.setInterval(() => {
+      setScanState("analyzing")
+      window.setTimeout(() => setScanState("safe"), 1800)
+    }, 7000)
+    return () => window.clearInterval(interval)
+  }, [hardLock])
+
+  const bentoContainer = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: { staggerChildren: 0.07, delayChildren: 0.06 },
+    },
+  }
+
+  const bentoItem = {
+    hidden: { opacity: 0, y: 14 },
+    show: {
+      opacity: 1,
+      y: 0,
+      transition: { type: "spring" as const, stiffness: 380, damping: 28 },
+    },
+  }
 
   return (
-    <div className="relative flex min-h-[100dvh] items-center justify-center px-4 pb-28 pt-32">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_30%,rgba(16,185,129,0.08),transparent_50%)]" />
+    <div className="relative min-h-[100dvh] bg-[#030303] pb-32 pt-28 text-zinc-100">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_90%_50%_at_50%_-10%,rgba(37,99,235,0.12),transparent_55%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_80%_100%,rgba(16,185,129,0.06),transparent_45%)]" />
 
       <motion.div
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        className="relative z-10 flex max-w-sm flex-col items-center text-center"
+        className="relative z-10 mx-auto max-w-lg px-4"
+        variants={bentoContainer}
+        initial="hidden"
+        animate="show"
       >
-        <motion.div
-          className="mb-6 flex h-24 w-24 items-center justify-center rounded-full border border-emerald-500/40 bg-emerald-500/10 shadow-[0_0_40px_rgba(16,185,129,0.25)]"
-          animate={{
-            boxShadow: [
-              "0 0 40px rgba(16,185,129,0.2)",
-              "0 0 56px rgba(16,185,129,0.35)",
-              "0 0 40px rgba(16,185,129,0.2)",
-            ],
-          }}
-          transition={{ duration: 3, repeat: Infinity }}
-        >
-          <ShieldCheck className="h-12 w-12 text-emerald-400" strokeWidth={1.25} />
+        <motion.div variants={bentoItem} className="mb-6 text-center">
+          <div className="mb-4 flex justify-center">
+            <VigilLogoMark variant="plate" />
+          </div>
+          <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-blue-400/80">
+            On-Device AI
+          </p>
+          <h2 className="mt-1 text-2xl font-bold tracking-tight text-white">
+            Twój Vigil
+          </h2>
+          <p className="mt-1 text-sm text-zinc-500">
+            Wszystko dzieje się na Twoim telefonie — bez wysyłania czatu do chmury.
+          </p>
         </motion.div>
-        <h2 className="text-xl font-semibold text-white">Tryb dyskretny</h2>
-        <p className="mt-2 text-sm leading-relaxed text-zinc-500">
-          Vigil chroni prywatność — analiza wzorców na urządzeniu (Zero Cloud).
-          Rodzic nie otrzymuje cytatów z rozmów.
-        </p>
-        <button
-          type="button"
-          onClick={onSimulateSextortion}
-          className="mt-8 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-medium text-zinc-400 backdrop-blur-md hover:bg-white/10 hover:text-zinc-200"
-        >
-          TEST: Symuluj zagrożenie (Sextortion)
-        </button>
+
+        <div className="grid grid-cols-2 gap-3">
+          <motion.div
+            variants={bentoItem}
+            className={`col-span-2 ${teenCardBase} p-5`}
+          >
+            <div className="flex items-start gap-4">
+              <div className="relative flex h-20 w-20 shrink-0 items-center justify-center">
+                <motion.div
+                  className="absolute inset-0 rounded-full border border-blue-500/30"
+                  animate={{ scale: [1, 1.35, 1], opacity: [0.5, 0, 0.5] }}
+                  transition={{ duration: 2.2, repeat: Infinity, ease: "easeOut" }}
+                />
+                <motion.div
+                  className="absolute inset-1 rounded-full border border-blue-400/25"
+                  animate={{ scale: [1, 1.2, 1], opacity: [0.4, 0.15, 0.4] }}
+                  transition={{
+                    duration: 2.2,
+                    repeat: Infinity,
+                    ease: "easeOut",
+                    delay: 0.35,
+                  }}
+                />
+                <div className="relative flex h-14 w-14 items-center justify-center rounded-full border border-blue-500/40 bg-blue-500/10 shadow-[0_0_28px_rgba(59,130,246,0.35)]">
+                  <Shield className="h-7 w-7 text-blue-300" strokeWidth={1.5} />
+                </div>
+              </div>
+              <div className="min-w-0 flex-1 pt-0.5">
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-blue-200/90">
+                  Status ochrony
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-zinc-300">
+                  Vigil AI aktywnie analizuje wzorce lokalnie.
+                </p>
+                <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-emerald-400/90">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                  </span>
+                  Skan na żywo
+                </p>
+              </div>
+            </div>
+          </motion.div>
+
+          <motion.div
+            variants={bentoItem}
+            className={`col-span-2 ${teenCardBase} border-emerald-500/15 p-5`}
+          >
+            <div className="flex gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-emerald-500/25 bg-emerald-500/10 text-emerald-300">
+                <Lock className="h-5 w-5" strokeWidth={1.5} />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-white">
+                  Prywatność pod kontrolą
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-zinc-400">
+                  Twoje rozmowy są prywatne. Rodzic widzi tylko kategorie zagrożeń,
+                  nigdy treść.
+                </p>
+              </div>
+            </div>
+          </motion.div>
+
+          <motion.div
+            variants={bentoItem}
+            className={`col-span-2 ${teenCardBase} p-5`}
+          >
+            <h3 className="text-sm font-semibold text-white">
+              Ostatnie skanowanie wzorców
+            </h3>
+            <p className="mt-1 text-xs text-zinc-500">
+              AI sprawdza zachowanie, nie czyta Twoich wiadomości jak zwykły czat.
+            </p>
+            <ul className="mt-4 space-y-3">
+              {TEEN_SCAN_ITEMS.map((row) => (
+                <li
+                  key={row.id}
+                  className="flex items-center gap-3 rounded-xl border border-white/5 bg-black/25 px-3 py-2.5"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-blue-500/20 bg-blue-500/5 text-blue-300">
+                    <row.Icon className="h-5 w-5" strokeWidth={1.5} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-zinc-200">{row.label}</p>
+                    <p className="text-[11px] text-zinc-600">{row.time}</p>
+                  </div>
+                  <span className="shrink-0 text-right text-[11px] font-medium leading-snug text-emerald-400">
+                    Bezpieczne:
+                    <br />
+                    Brak manipulacji behawioralnej
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </motion.div>
+
+          <motion.div
+            variants={bentoItem}
+            className={`col-span-2 ${teenCardBase} border-sky-500/25 p-5`}
+          >
+            <h3 className="text-sm font-semibold text-white">Zero Cloud Setup</h3>
+            <p className="mt-1 text-xs text-zinc-500">
+              Prywatność przez architekturę — onboarding technologiczny.
+            </p>
+            <div className="mt-4 grid grid-cols-3 gap-2 text-center text-[11px]">
+              <div className="rounded-lg border border-white/10 bg-black/30 px-2 py-2 text-zinc-300">
+                Dane tekstowe
+              </div>
+              <motion.div
+                className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-2 py-2 text-sky-100"
+                animate={{
+                  boxShadow: [
+                    "0 0 0 rgba(14,165,233,0)",
+                    "0 0 14px rgba(14,165,233,0.35)",
+                    "0 0 0 rgba(14,165,233,0)",
+                  ],
+                }}
+                transition={{ duration: 2, repeat: Infinity }}
+              >
+                Lokalne AI
+              </motion.div>
+              <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-2 py-2 text-emerald-100">
+                Bez chmury
+              </div>
+            </div>
+          </motion.div>
+
+          <motion.div variants={bentoItem} className={`col-span-2 ${teenCardBase} p-5`}>
+            <h3 className="text-sm font-semibold text-white">
+              Twoje bezpieczne aplikacje
+            </h3>
+            <p className="mt-1 text-xs text-zinc-500">
+              Vigil Safe — sprawdzone integracje.
+            </p>
+            <div className="teen-apps-scroll mt-4 -mx-1 flex gap-5 overflow-x-auto px-1 pb-2">
+              {CERTIFIED_APPS.map((app) => (
+                <div
+                  key={app.id}
+                  className="flex w-[5.25rem] shrink-0 flex-col items-center gap-2"
+                >
+                  <div className="relative flex flex-col items-center">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-blue-500/25 bg-zinc-900/80 text-blue-200 shadow-inner">
+                      <app.Icon className="h-7 w-7" strokeWidth={1.5} />
+                    </div>
+                    <div className="mt-1.5 origin-top scale-[0.72]">
+                      <VigilSafeBadge tone="gold" />
+                    </div>
+                  </div>
+                  <span className="max-w-[5.25rem] truncate text-center text-[10px] font-medium text-zinc-400">
+                    {app.name.split("(")[0].trim()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        </div>
+
+        <motion.div variants={bentoItem} className="mt-8 flex justify-center">
+          <button
+            type="button"
+            onClick={onSimulateSextortion}
+            className="rounded-full border border-red-500/40 bg-red-950/40 px-5 py-2.5 text-xs font-semibold text-red-200 shadow-[0_0_24px_rgba(239,68,68,0.15)] backdrop-blur-md transition hover:border-red-500/60 hover:bg-red-950/60"
+          >
+            TEST: Symuluj zagrożenie
+          </button>
+        </motion.div>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        className={`fixed right-4 top-28 z-40 rounded-full border px-3 py-1.5 text-[11px] font-semibold backdrop-blur-md ${
+          scanState === "safe"
+            ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-200"
+            : scanState === "analyzing"
+              ? "border-amber-400/45 bg-amber-500/15 text-amber-100"
+              : "border-red-500/45 bg-red-500/20 text-red-100"
+        }`}
+      >
+        {scanState === "safe" && "Cichy Strażnik: wszystko OK"}
+        {scanState === "analyzing" &&
+          "Cichy Strażnik: analizuję podejrzany kontekst"}
+        {scanState === "alert" && "Cichy Strażnik: krytyczny alert"}
       </motion.div>
 
       <AnimatePresence>
@@ -944,36 +1540,77 @@ function TeenShield({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-red-950/90 p-6 backdrop-blur-md"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-[#140202]/95 p-5 backdrop-blur-2xl"
           >
             <motion.div
-              initial={{ scale: 0.92, opacity: 0 }}
+              initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className={`max-w-md ${cardBase} border-red-500/50 p-8 text-center shadow-[0_0_48px_rgba(239,68,68,0.35)]`}
+              transition={{ type: "spring", stiffness: 320, damping: 26 }}
+              className={`w-full max-w-md border p-8 text-center shadow-[0_0_60px_rgba(220,38,38,0.35)] backdrop-blur-md ${
+                lockReason === "sextortion"
+                  ? "rounded-2xl border-red-600/40 bg-red-950/80"
+                  : `rounded-2xl ${cardBase} border-red-500/50`
+              }`}
             >
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-500/20">
-                <AlertTriangle className="h-8 w-8 text-red-400" />
+              <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-red-600/25 ring-2 ring-red-500/40">
+                <AlertTriangle className="h-9 w-9 text-red-400" />
               </div>
-              <h3 className="text-xl font-bold tracking-tight text-white">
-                Aplikacja zablokowana — interwencja Vigil
-              </h3>
-              <p className="mt-3 text-sm text-zinc-400">{lockCopy}</p>
-              <p className="mt-2 text-xs text-zinc-600">
-                Rodzic otrzymał Instant Alert. Odblokowanie po weryfikacji w Vigil
-                Parent.
-              </p>
-              <button
-                type="button"
-                onClick={onDismissLock}
-                className="mt-6 w-full rounded-xl bg-zinc-800 py-3 text-sm font-medium text-white hover:bg-zinc-700"
-              >
-                Zamknij (demo)
-              </button>
+              {lockReason === "sextortion" ? (
+                <>
+                  <p className="font-mono text-[11px] font-semibold uppercase tracking-widest text-red-300/90">
+                    Alert bezpieczeństwa
+                  </p>
+                  <h3 className="mt-2 text-xl font-bold leading-snug tracking-tight text-white">
+                    ALERT BEZPIECZEŃSTWA: Wykryto wzorzec szantażu (Sextortion)
+                  </h3>
+                  <p className="mt-4 text-sm leading-relaxed text-red-100/85">
+                    To połączenie zostało zawieszone ze względu na Twoje
+                    bezpieczeństwo. Czekamy na weryfikację rodzica.
+                  </p>
+                  <p className="mt-2 text-xs text-red-200/80">
+                    Vigil zabezpieczył dowody w Skarbcu lokalnym.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={onDismissLock}
+                    className="mt-6 w-full rounded-xl bg-red-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-red-900/40 transition hover:bg-red-500"
+                  >
+                    Zablokuj aplikację i poproś o wsparcie
+                  </button>
+                  <p className="mt-4 text-xs text-red-200/60">
+                    Rodzic dostał powiadomienie. W demo możesz zamknąć ten ekran
+                    przyciskiem powyżej.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h3 className="text-xl font-bold tracking-tight text-white">
+                    Aplikacja zablokowana — interwencja Vigil
+                  </h3>
+                  <p className="mt-3 text-sm text-zinc-400">{lockCopy}</p>
+                  <p className="mt-2 text-xs text-zinc-600">
+                    Rodzic otrzymał Instant Alert. Odblokowanie po weryfikacji w
+                    Vigil Parent.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={onDismissLock}
+                    className="mt-6 w-full rounded-xl bg-zinc-800 py-3 text-sm font-medium text-white hover:bg-zinc-700"
+                  >
+                    Zamknij (demo)
+                  </button>
+                </>
+              )}
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      <style>{`
+        .teen-apps-scroll::-webkit-scrollbar { display: none; }
+        .teen-apps-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+      `}</style>
     </div>
   )
 }
